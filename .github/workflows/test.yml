@@ -26,13 +26,16 @@ jobs:
         run: pytest testcases/test_golden.py -v
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
 
       - name: Run unit tests
         run: pytest testcases/test_react_unit.py -v
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # 单元测试不需要 LANGSMITH_API_KEY
 
       - name: Run integration tests
         run: pytest testcases/test_react_integration.py -v --tb=short
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
