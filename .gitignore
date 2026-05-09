@@ -1,0 +1,10 @@
+*.log 
+api_test_log.txt 
+.venv/ 
+.idea/ 
+__pycache__/ 
+*.pyc 
+.pytest_cache/ 
+reports/ 
+allure-results/ 
+.env 

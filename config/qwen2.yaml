@@ -1,0 +1,11 @@
+client_qwen2:
+  request:
+    url: http://localhost:11434/api/generate
+    method: post
+    json:
+      model: qwen2:latest
+      stream: false
+      temperature: 0
+      seed: 42
+      prompt: question
+  need_token: false

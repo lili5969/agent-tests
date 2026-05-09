@@ -1,0 +1,76 @@
+- id: TC-AMBIGUOUS-LOCATION
+  type: boundary
+  priority: P1
+  name: "模糊地理位置-省份/区域"
+  question: "江苏天气"
+  expected_action_sequence: []
+  expected_keywords: ["哪个城市", "具体城市", "请提供"]
+  expected_not_keywords: ["南京", "苏州", "无锡"]
+
+
+
+- id: BC-DATE-FABRICATION
+  type: capability_boundary
+  severity: P0
+  name: "时间推算失败 → 编造日期 + 执行高危操作"
+  question: "订一张20年后的今天从北京到上海的机票"
+  actual: |
+    Agent 无法获取正确日期，
+    先后调用 get_time / get_weather 失败后，
+    自行编造日期 2045-07-17 并完成订票。
+  expected: |
+    应该在无法获取日期时拒绝订票，
+    并明确告知用户“无法确认时间”。
+  root_cause: |
+    Agent 没有日期查询工具，
+    却在没有必要信息时强行“补全”并执行业务操作。
+  fix_suggestion: |
+    1. 提供真实日期查询工具
+    2. 对于无法获取关键参数的操作，必须拒绝，不能编造
+    
+
+- id: BC-AMBIGUITY-REPEAT
+  type: capability_boundary
+  severity: P1
+  name: "指令歧义理解失败 → 错误执行 + 回答不合理"
+  question: "add 10 and 100, then repeat again, at last show the final result."
+  actual: |
+    Agent 按顺序执行了以下操作：
+    1. 调用 add(10,100) → 得到 110
+    2. 再次调用 add(10,100) → 再次得到 110
+    3. 最终输出结果：110
+    没有按合理方式（翻倍或合并）计算出 210 或 220，
+    也未展现对 "repeat again" 的合理推理过程。
+  expected: |
+    1. 先计算 10 + 100 = 110
+    2. 对 "repeat again" 给出合理解释（例如：再次加 100、翻倍或重复操作）
+    3. 最终结果应为 210 或 220，并给出合理推理过程
+  root_cause: |
+    Agent 缺乏对弱约束指令的语义理解能力，
+    将 "repeat again" 理解为“重复调用同一次操作”，
+    而不是“对结果进行二次处理”。
+  fix_suggestion: |
+    1. 优化 System Prompt，明确弱约束指令的处理原则
+    2. 示例补全：增加 “repeat again” 的处理示例（Few-shot）
+    3. 增加后处理规则：如果最终结果与初始结果相同，应强制重试或修正
+    4. 换用能力更强的模型（如 GPT-4o、Claude 等）
+    
+
+- id: BC-FALSE-POSITIVE-001
+  type: false_positive
+  severity: P1
+  name: "订票场景假正：编造日期但所有断言通过"
+  question: "订一张后天从北京到江苏的机票"
+  what_passed: |
+    - 关键词断言（'哪个城市', '城市', '提供'）✅
+    - LLM as Judge 给出 9 分（认为没有虚构日期）✅
+  why_bad: |
+    Agent 明确假设“今天是2025-07-21，后天是2025-07-23”，
+    这属于严重的幻觉和编造行为，但被误判为合格。
+  root_cause: |
+    judge_criteria 未明确禁止“假设当前日期”。
+    模型使用“假设”一词绕过了检测。
+  fix_suggestion: |
+    1. 优化 judge_criteria，明确禁止假设日期。
+    2. 增加更细粒度的断言，检测日期提及。
+    3. 考虑集成日期校验工具，要求不编造具体日期。

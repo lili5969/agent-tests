@@ -1,0 +1,6 @@
+provider: "deepseek"
+model: "deepseek-chat"
+api_key: "${DEEPSEEK_API_KEY}"  # 从环境变量读取
+base_url: "https://api.deepseek.com"
+temperature: 0
+  

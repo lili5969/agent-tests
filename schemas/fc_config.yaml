@@ -1,0 +1,111 @@
+tools:
+  - type: function
+    function:
+      name: get_weather
+      description: 查询天气。必须在参数完整时才能调用。如果城市缺失，绝对不能调用！
+      parameters:
+        type: object
+        required: [city]
+        properties:
+          city:
+            type: string
+            description: 城市名称。禁止传（今天/明天）等时间词语，禁止传null/None/空值/未提供/。
+          date:
+            type: string
+            description: 日期，没有可以不传
+
+  - type: function
+    function:
+      name: book_ticket
+      description: 预订机票。禁止编造必填参数，禁止传None/null/未知给任意必填参数。
+      parameters:
+        type: object
+        required: [from_city, to_city, date]
+        properties:
+          from_city:
+            type: string
+            description: 出发城市名称，禁止传（今天/明天）等时间词语，禁止传null/None/未知/未提供/
+          to_city:
+            type: string
+            description: 目的城市名称，禁止传（今天/明天）等时间词语，禁止传null/None/未知/未提供/
+          date:
+            type: string
+            description: 出行日期，仅允许时间/日期，示例：2025-10-01、明天、周五、12月25日
+
+  - type: function
+    function:
+      name: get_order
+      description: 查询订单信息，根据订单号获取订单及物流单号。参数不完整禁止调用。
+      parameters:
+        type: object
+        required: [ order_id ]
+        properties:
+          order_id:
+            type: string
+            description: 订单编号，格式如 ORD-12345，禁止传null/None/空值/未知/未提供/
+
+  - type: function
+    function:
+      name: get_logistics
+      description: 查询物流单号，必须传入有效的订单号。无tracking_id禁止调用。
+      parameters:
+        type: object
+        required: [ tracking_id ]
+        properties:
+          tracking_id:
+            type: string
+            description: 物流单号，格式如 TRK-001，禁止传null/None/空值/未知/未提供/
+
+  - type: function
+    function:
+      name: get_time
+      description: 查询某个地点的时间提示。参数缺失禁止调用。
+      parameters:
+        type: object
+        required: [ location ]
+        properties:
+          location:
+            type: string
+            description: 地点名称，禁止传null/None/空值/未知/未提供/
+
+  - type: function
+    function:
+      name: get_delivery_status
+      description: 查询预计送达时间。必须传入有效的位置。无location禁止调用。
+      parameters:
+        type: object
+        required: [ location ]
+        properties:
+          location:
+            type: string
+            description: 位置，必须是合法城市名 如'北京' 禁止传null/None/空值/未知/未提供/
+
+  - type: function
+    function:
+      name: add
+      description: 计算2个数的和
+      parameters:
+        type: object
+        required: [ a, b ]
+        properties:
+          a:
+            type: integer
+            description: 第一个数。如参数缺失必须反问，禁止编造。
+          b:
+            type: integer
+            description: 第二个数。如参数缺失必须反问，禁止编造。
+
+  - type: function
+    function:
+      name: multiply
+      description: 计算两个数的乘积
+      parameters:
+        type: object
+        required: [ a, b ]
+        properties:
+          a:
+            type: integer
+            description: 第一个数。如参数缺失必须反问，禁止编造。
+          b:
+            type: integer
+            description: 第二个数。如参数缺失必须反问，禁止编造。
