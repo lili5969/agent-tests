@@ -34,7 +34,13 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           # 单元测试不需要 LANGSMITH_API_KEY
 
-      - name: Run integration tests
+      - name: Run capability tests (LLM Judge)
+        run: pytest testcases/test_react_integration.py -v -k "capability" --tb=short
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+
+      - name: Run integration tests (full)
         run: pytest testcases/test_react_integration.py -v --tb=short
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
