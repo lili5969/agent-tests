@@ -8,6 +8,7 @@ from tools.tool_func import *
 
 # 读取测试数据
 case_data = read_yaml_file('testdata/agent_react.yaml')['test_cases']
+smoke_cases = [c for c in case_data if c.get("priority") == "P0"]
 capability_cases = [c for c in case_data if c.get("capability")]
 multi_turns_cases = [c for c in case_data if "turns" in c]
 trajectory_cases = [c for c in case_data if c.get("flag") == "trajectory"]
@@ -31,6 +32,26 @@ def collect_result(metrics, case, passed, score, answer=""):
 
 
 class TestReActAgent:
+
+    @pytest.mark.parametrize("case", smoke_cases, ids=lambda x: x["id"])
+    def test_smoke(self, agent_deepseek, judge_deepseek, case, metrics_calculator, qualitative_analyzer):
+
+        result = TestHelper.dispatch(agent_deepseek, judge_deepseek, case)
+
+        collect_result(metrics_calculator, case, result["passed"], result.get("score", 0), result.get("answer", ""))
+
+        if not result["passed"]:
+            qualitative_analyzer.add_failure(
+                case_id=case["id"],
+                question=case.get("question", ""),
+                expected=str(case.get("expected_keywords", [])),
+                actual=result.get("answer", ""),
+                judge_score=result.get("score", 0),
+                judge_reason=result.get("reason", ""),
+                flags=case.get("flags", [])
+            )
+
+        assert result["passed"], f"冒烟失败: {result.get('reason', '未知原因')}"
 
     @pytest.mark.parametrize("case", simple_cases, ids=lambda x: x["id"])
     def test_simple(self, agent_deepseek, judge_deepseek, case, metrics_calculator):

@@ -1,16 +1,102 @@
 name: Agent Test Pipeline
 
 on:
+  pull_request:
+    branches: [master]
   push:
     branches: [master]
+  schedule:
+    - cron: '0 2 * * *'  # 每日凌晨 2 点
   workflow_dispatch:
 
 jobs:
-  # 黄金集门禁（必须通过）
-  golden-test:
-    name: Golden Set Tests
+  # ========== 1. CI 阶段（PR，必须通过）==========
+  unit-test:
+    name: 单元测试 + Mock
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
+      - name: Run unit tests
+        run: pytest testcases/test_react_unit.py -v
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+  # ========== 2. CD 阶段（PR/合并后，冒烟测试）==========
+  smoke-test:
+    name: 冒烟测试（P0 核心用例）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
+      - name: Run smoke tests
+        run: pytest testcases/test_react_integration.py -k "test_smoke" -v
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+  # ========== 3. CD 阶段（合并后，全量功能回归）==========
+  full-test:
+    name: 全量功能回归
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
+      - name: Run full tests
+        run: pytest testcases/test_react_integration.py -v --tb=short
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+
+  # ========== 4. Nightly（定时，全量集成 + 能力报告）==========
+  nightly-test:
+    name: Nightly 全量集成测试
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
+      - name: Run full tests with report
+        run: pytest testcases/test_react_integration.py -v --tb=short
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-report
+          path: reports/
+
+  # ========== 5. 预发布阶段（手动，黄金集门禁）==========
+  golden-test:
+    name: 黄金集门禁（发版前必须 100%）
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -25,29 +111,12 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
 
-  # 单元测试 + Mock（必须通过）
-  unit-test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
-      - name: Run unit tests
-        run: pytest testcases/test_react_unit.py -v
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-
-  # 能力测试（LLM Judge，允许失败，不阻断）
+  # ========== 6. 手动触发：能力测试（LLM Judge）==========
   capability-test:
-    name: Capability Tests (LLM Judge)
+    name: 能力测试（LLM Judge）
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -58,27 +127,7 @@ jobs:
       - name: Install dependencies
         run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
       - name: Run capability tests
-        run: pytest testcases/test_react_integration.py -v -k "capability" --tb=short
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-
-  # 全量集成测试（依赖黄金集和单元测试通过）
-  integration-test:
-    name: Full Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [golden-test, unit-test]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
-      - name: Run integration tests
-        run: pytest testcases/test_react_integration.py -v --tb=short
+        run: pytest testcases/test_react_integration.py -k "capability" -v --tb=short
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
