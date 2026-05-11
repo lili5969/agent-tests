@@ -6,11 +6,11 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: '0 2 * * *'  # 每日凌晨 2 点
-  workflow_dispatch:
+    - cron: '0 2 * * *'  # 每日凌晨 2 点（Nightly）
+  workflow_dispatch:      # 手动触发（能力测试）
 
 jobs:
-  # ========== 1. CI 阶段（PR，必须通过）==========
+  # ========== 1. MR 阶段：单元测试 ==========
   unit-test:
     name: 单元测试 + Mock
     runs-on: ubuntu-latest
@@ -28,11 +28,12 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
-  # ========== 2. CD 阶段（PR/合并后，冒烟测试）==========
+  # ========== 2. MR 阶段：Smoke 冒烟测试 ==========
   smoke-test:
-    name: 冒烟测试（P0 核心用例）
+    name: Smoke 冒烟测试（100% 必过）
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: unit-test
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -42,15 +43,36 @@ jobs:
       - name: Install dependencies
         run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
       - name: Run smoke tests
-        run: pytest testcases/test_react_integration.py -k "test_smoke" -v
+        run: pytest testcases/test_react_integration.py -m smoke -v
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
-  # ========== 3. CD 阶段（合并后，全量功能回归）==========
-  full-test:
-    name: 全量功能回归
+  # ========== 3. 测试环境：Golden 门禁（push 后自动触发）==========
+  golden-test-env:
+    name: Golden 门禁（测试环境，100% 必过）
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
+      - name: Run golden tests
+        run: pytest testcases/test_golden.py -v
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+
+  # ========== 4. 预发布阶段：Golden Double Confirm + Full 全量（Golden 成功后自动触发）==========
+  pre-release:
+    name: 预发布验证（Golden 100% 后自动触发）
+    runs-on: ubuntu-latest
+    needs: golden-test-env
+    if: github.event_name == 'push' && needs.golden-test-env.result == 'success'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -60,13 +82,18 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
-      - name: Run full tests
+      - name: Golden Double Confirm
+        run: pytest testcases/test_golden.py -v
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      - name: Full 全量回归
         run: pytest testcases/test_react_integration.py -v --tb=short
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
 
-  # ========== 4. Nightly（定时，全量集成 + 能力报告）==========
+  # ========== 5. Nightly（定时，全量集成 + 能力报告）==========
   nightly-test:
     name: Nightly 全量集成测试
     runs-on: ubuntu-latest
@@ -91,27 +118,7 @@ jobs:
           name: nightly-report
           path: reports/
 
-  # ========== 5. 预发布阶段（手动，黄金集门禁）==========
-  golden-test:
-    name: 黄金集门禁（发版前必须 100%）
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
-      - name: Run golden set
-        run: pytest testcases/test_golden.py -v
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-
-  # ========== 6. 手动触发：能力测试（LLM Judge）==========
+  # ========== 6. 手动按需：能力测试（LLM Judge）==========
   capability-test:
     name: 能力测试（LLM Judge）
     runs-on: ubuntu-latest

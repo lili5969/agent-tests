@@ -59,28 +59,30 @@ ollama pull qwen2:7b
 按 CI/CD 时间线执行：
 
 ```bash
-# 1. CI 阶段（每次 MR，< 5min）
-pytest testcases/test_react_unit.py -v                # 单元测试 + Mock
+# CI/CD 流程说明
+## 1. MR 阶段（< 2min）
+pytest testcases/test_react_integration.py -v -m smoke   # Smoke 冒烟测试（100% 必过）
 
-# 2. CD 阶段（部署测试环境后，15min）
-pytest testcases/test_react_integration.py -v -m smoke  # 冒烟测试（P0 核心用例）
-pytest testcases/test_react_integration.py -v            # 全量功能回归
+## 2. 测试环境（15min）
+pytest testcases/test_golden.py -v                        # Golden 门禁（100% 必过）
 
-# 3. 预发布阶段（发版前，手动触发，5min）
-pytest testcases/test_golden.py -v                      # 黄金集门禁（必须 100%）
+## 3. 预发布环境（20min）
+pytest testcases/test_golden.py -v                        # Golden Double Confirm（100% 必过）
+pytest testcases/test_react_integration.py -v             # Full 全量回归（≥80%，阻塞发版）
 
-# 4. Nightly（每日凌晨，定时触发，30min）
-pytest testcases/test_react_integration.py -v --tb=short  # 全量集成 + 能力报告
+## 4. Nightly（每日凌晨，30min）
+pytest testcases/test_react_integration.py -v --tb=short  # Full 全量回归（仅报告，不阻塞）
 
-# 5. 模型升级时（手动触发，1h，**仅本地运行**）
-pytest testcases/test_model_comparison.py -v              # Qwen2(需要本地 Ollama) 和 DeepSeek
+## 5. 模型升级（手动，1h，仅本地）
+pytest testcases/test_model_comparison.py -v              # Qwen2 vs DeepSeek
 ```
-
 ## CI 说明
 
-- 提交代码自动运行：单元测试、冒烟测试、全量功能回归
-- 手动触发运行：黄金集门禁、能力测试
-- 定时触发运行：Nightly 全量测试
+- 自动（MR）：Smoke 冒烟测试
+- 自动（测试环境）：Golden 门禁
+- 手动（发版前）：Golden Double Confirm + Full 全量回归
+- 定时（每日凌晨）：Nightly 全量测试
+- 手动按需（本地）：多模型能力对比/安全测试专项
 
 ## 测试闭环
 
