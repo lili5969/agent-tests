@@ -32,7 +32,8 @@ def collect_result(metrics, case, passed, score, answer=""):
 
 
 class TestReActAgent:
-
+    
+    @pytest.mark.smoke
     @pytest.mark.parametrize("case", smoke_cases, ids=lambda x: x["id"])
     def test_smoke(self, agent_deepseek, judge_deepseek, case, metrics_calculator, qualitative_analyzer):
 
