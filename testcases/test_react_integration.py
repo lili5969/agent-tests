@@ -32,7 +32,7 @@ def collect_result(metrics, case, passed, score, answer=""):
 
 
 class TestReActAgent:
-    
+
     @pytest.mark.smoke
     @pytest.mark.parametrize("case", smoke_cases, ids=lambda x: x["id"])
     def test_smoke(self, agent_deepseek, judge_deepseek, case, metrics_calculator, qualitative_analyzer):
@@ -90,6 +90,8 @@ class TestReActAgent:
                 criteria=case.get('judge_criteria')
             )
             logger.info(f"Judge score: {judge_result['score']}, reason: {judge_result['reason']}")
+            result["score"] = judge_result["score"]
+            result["reason"] = judge_result.get("reason", "")
             result["passed"] = result["passed"] and judge_result["score"] >= 6
 
         collect_result(metrics_calculator, case, result["passed"], 10 if result["passed"] else 0,
@@ -116,15 +118,30 @@ class TestReActAgent:
         logger.info(f" 能力测试: {case['id']} - {case.get('name', case['id'])}")
         logger.info(f"{'=' * 60}")
 
-        result = TestHelper.run_capability(agent_deepseek, judge_deepseek, case)
+        result = TestHelper.dispatch(agent_deepseek, judge_deepseek, case)
 
-        # 打印详细的 Judge 结果
-        logger.info(f"\n 测试结果汇总:")
-        logger.info(f"   用例ID: {case['id']}")
-        logger.info(f"   是否通过: {'✅ 是' if result['passed'] else '❌ 否'}")
-        logger.info(f"   Judge 分数: {result.get('score', 'N/A')}/10")
-        if result.get('reason'):
-            logger.info(f"   Judge 评语: {result['reason']}")
+        # ========== 新增：LLM Judge 逻辑 ==========
+        # 如果用例需要 LLM Judge，且 dispatch 返回的结果中没有 judge 分数（即走了 run_trajectory/run_simple）
+        if case.get('llm_judge') and result.get("answer"):
+            # 构建问题文本（多轮场景取最后一轮）
+            if "turns" in case:
+                question = case["turns"][-1]["question"]
+            else:
+                question = case.get("question", "")
+
+            # 调用 Judge
+            judge_result = judge_deepseek.judge(
+                question=question,
+                actual_answer=result["answer"],
+                criteria=case.get('judge_criteria')
+            )
+            logger.info(f"Judge score: {judge_result['score']}, reason: {judge_result['reason']}")
+
+            # 覆盖 score 和 reason
+            result["score"] = judge_result["score"]
+            result["reason"] = judge_result.get("reason", "")
+            result["passed"] = result["passed"] and judge_result["score"] >= 6
+        # ========================================
 
         collect_result(metrics_calculator, case, result["passed"], result.get("score", 0), result.get("answer", ""))
 

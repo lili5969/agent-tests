@@ -123,17 +123,23 @@ class TestHelper:
                 raise AssertionError(
                     f"无序action验证失败! 期望 {expected_actions}, 实际 {actual_actions}"
                 )
-            logger.info(f"✅ 无序动作验证通过")
+            logger.info(f"无序动作验证通过")
+
 
         elif mode == 'strict':
+            logger.info(f"   模式: strict，期望序列: {expected_actions}，实际序列: {actual_actions}")
             if actual_actions != expected_actions:
-                logger.error(f" 严格模式动作序列验证失败!")
-                logger.error(f"   期望顺序: {expected_actions}")
-                logger.error(f"   实际顺序: {actual_actions}")
+                logger.error(f"   严格模式动作序列验证失败!")
+                logger.error(f"     期望顺序: {expected_actions}")
+                logger.error(f"     实际顺序: {actual_actions}")
                 raise AssertionError(
                     f"动作序列不匹配！期望顺序 {expected_actions}，实际 {actual_actions}"
                 )
-            logger.info(f"✅ 严格模式动作序列验证通过")
+            if not expected_actions:
+                logger.info(f" 期望无工具调用 (expected_action_sequence 为空)，实际也无调用")
+            else:
+
+                logger.info(f" 严格模式动作序列验证通过")
 
         elif mode == "contains":
             missing_actions = []
@@ -150,7 +156,7 @@ class TestHelper:
             logger.info(f" 包含模式验证通过，必要工具 {expected_actions} 均已调用")
 
         # 2. 验证参数
-        logger.info(f"\n🔍 步骤2: 验证工具参数")
+        logger.info(f"\n 步骤2: 验证工具参数")
         try:
             TestHelper.validate_parameters(case, trajectory, mode)
             logger.info(f" 参数验证通过")
@@ -164,7 +170,7 @@ class TestHelper:
             logger.info(f"   依赖配置: {case['parameter_dependencies']}")
             try:
                 TestHelper.validate_dependencies(case, trajectory)
-                logger.info(f"✅ 参数依赖验证通过")
+                logger.info(f" 参数依赖验证通过")
             except AssertionError as e:
                 logger.error(f" 参数依赖验证失败: {e}")
                 raise
@@ -216,7 +222,7 @@ class TestHelper:
                     )
             logger.info(f" 最终答案验证通过")
         else:
-            logger.info(f"\n🔍 步骤7: 无最终答案配置，跳过")
+            logger.info(f"\n 步骤7: 无最终答案配置，跳过")
 
         logger.info(f"\n{'=' * 60}")
         logger.info(f" 轨迹验证全部通过!")
@@ -245,49 +251,14 @@ class TestHelper:
 
         return True
 
-    # ========== 各类型测试执行方法 ==========
+    # ========== LLM Judge 统一方法 ==========
 
     @staticmethod
-    def run_simple(agent, case):
-        """执行简单关键词测试"""
-        try:
-            answer = agent.run(case["question"])
-            TestHelper.validate_keywords(answer, case)
-            return {"passed": True, "score": 10, "answer": answer}
-        except AssertionError as e:
-            return {"passed": False, "score": 0, "reason": str(e), "answer": answer}
-        except Exception as e:
-            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
-
-    @staticmethod
-    def run_trajectory(agent, case):
-        """执行轨迹测试"""
-        try:
-            answer = agent.run(case["question"], record_trajectory=True)
-            traj = agent.get_trajectory()
-
-            # 验证轨迹
-            TestHelper.verify_trajectory(case, answer, traj)
-
-            # 验证关键词（兜底）
-            TestHelper.validate_keywords(answer, case)
-
-            return {
-                "passed": True,
-                "score": 10,
-                "answer": answer,
-                "trajectory": traj,
-                "trajectory_length": len(traj.steps),
-                "tool_calls_count": len([s for s in traj.steps if s.action_name])
-            }
-        except AssertionError as e:
-            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
-        except Exception as e:
-            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
-
-    @staticmethod
-    def run_capability(agent, judge, case):
-        """执行 Capability 测试（LLM Judge）- 保留完整的 context 构建"""
+    def run_llm_judge(agent, judge, case):
+        """
+        统一的 LLM Judge 打分方法
+        适用于所有 llm_judge: true 且无 expected_action_sequence 的用例
+        """
         try:
             # 1. 执行 Agent 获取回答和轨迹
             if "turns" in case:
@@ -307,38 +278,34 @@ class TestHelper:
                 trajectory_text = "\n".join([
                     f"Step {step.step_num}: {step.action_name}({step.args}) -> {step.result}"
                     for step in trajectory.steps
-                ])
+                ]) if trajectory else "无轨迹记录"
                 question = case["question"]
-                logger.info(f"单轮场景，轨迹步数: {len(trajectory.steps)}")
+                logger.info(f"单轮场景，轨迹步数: {len(trajectory.steps) if trajectory else 0}")
 
             logger.info(f"问题: {question}")
             logger.info(f"回答: {answer[:200]}..." if len(answer) > 200 else f"回答: {answer}")
 
-            # 2. 构建完整的 Judge 上下文
+            # 2. 构建 Judge 上下文
             context = f"""
-    系统提示词（System Prompt）：
-    {agent.system_prompt}
+系统提示词（System Prompt）：
+{agent.system_prompt}
 
-    执行轨迹（Trajectory）：
-    {trajectory_text}
+执行轨迹（Trajectory）：
+{trajectory_text}
 
-    用户问题：{question}
+用户问题：{question}
 
-    黄金标准（Golden Standard）：
-    {case.get("golden_standard", "")}
-    """
+Agent 回答：{answer}
+
+黄金标准（Golden Standard）：
+{case.get("golden_standard", "")}
+"""
 
             # 3. 获取 judge_criteria
-            # 注意：case 中可能有 judge_criteria，即使是 capability=true 的用例
             judge_criteria = case.get("judge_criteria")
 
-            # 如果有 judge_criteria，使用它；否则使用默认的
             if judge_criteria:
-                # 如果有 golden_standard，拼接 context
-                if case.get("golden_standard"):
-                    final_criteria = f"{context}\n{judge_criteria}"
-                else:
-                    final_criteria = f"{context}\n{judge_criteria}"
+                final_criteria = f"{context}\n{judge_criteria}"
                 logger.info(f"使用自定义 judge_criteria，长度: {len(final_criteria)} 字符")
             else:
                 # 默认 judge_criteria
@@ -360,9 +327,12 @@ class TestHelper:
             logger.info(f"Judge 评分: {score}/10")
             logger.info(f"Judge 评语: {reason}")
 
-            passed = score >= 6
+            # 5. 根据优先级决定阈值
+            min_score = 8 if case.get("priority") == "P0" else 6
+            passed = score >= min_score
+
             status = "✅ 通过" if passed else "❌ 失败"
-            logger.info(f"最终结果: {status} (阈值: 6分)")
+            logger.info(f"最终结果: {status} (阈值: {min_score}分)")
 
             return {
                 "passed": passed,
@@ -371,12 +341,66 @@ class TestHelper:
                 "reason": reason,
                 "judge_response": judge_result
             }
+
         except AssertionError as e:
             logger.error(f"断言失败: {e}")
             return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
         except Exception as e:
             logger.error(f"异常: {e}")
             return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
+
+    # ========== 各类型测试执行方法 ==========
+
+    @staticmethod
+    def run_simple(agent, case):
+        """执行简单关键词测试"""
+        try:
+            answer = agent.run(case["question"])
+            TestHelper.validate_keywords(answer, case)
+            return {"passed": True, "score": 10, "answer": answer}
+        except AssertionError as e:
+            return {"passed": False, "score": 0, "reason": str(e), "answer": answer}
+        except Exception as e:
+            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
+
+    @staticmethod
+    def run_trajectory(agent, case):
+        """执行轨迹测试（仅轨迹验证，不含 Judge）"""
+        logger.info(f"\n{'=' * 70}")
+        logger.info(f" [TRAJECTORY_VERIFY] 用例: {case['id']} - {case.get('name', case['id'])}")
+        logger.info(f"   expected_action_sequence: {case.get('expected_action_sequence', '未设置')}")
+        logger.info(f"{'=' * 70}")
+
+        try:
+            answer = agent.run(case["question"], record_trajectory=True)
+            traj = agent.get_trajectory()
+
+            actual_actions = [step.action_name for step in traj.steps]
+            logger.info(f"   📋 实际工具调用序列: {actual_actions}")
+
+            # 验证轨迹
+            TestHelper.verify_trajectory(case, answer, traj)
+
+            # 验证关键词（兜底）
+            TestHelper.validate_keywords(answer, case)
+
+            logger.info(f" [TRAJECTORY_VERIFY] 通过: {case['id']}\n")
+
+            return {
+                "passed": True,
+                "score": 10,
+                "answer": answer,
+                "trajectory": traj,
+                "trajectory_length": len(traj.steps),
+                "tool_calls_count": len([s for s in traj.steps if s.action_name])
+            }
+        except AssertionError as e:
+            logger.error(f"❌ [TRAJECTORY_VERIFY] 失败: {case['id']} - {e}\n")
+            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
+        except Exception as e:
+            logger.error(f"❌ [TRAJECTORY_VERIFY] 异常: {case['id']} - {e}\n")
+            return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
+
 
     @staticmethod
     def run_multiturn(agent, judge, case):
@@ -390,37 +414,33 @@ class TestHelper:
 
             final_answer = messages[-1].get("content", "")
 
-            # 如果有 capability 且 judge_criteria，用 Judge 打分
-            if case.get("capability") and case.get("judge_criteria"):
-                judge_result = judge.judge(
-                    question=case["turns"][-1]["question"],
-                    actual_answer=final_answer,
-                    criteria=case["judge_criteria"]
-                )
-                passed = judge_result["score"] >= 6
-                return {
-                    "passed": passed,
-                    "score": judge_result["score"],
-                    "answer": final_answer,
-                    "reason": judge_result.get("reason", "")
-                }
+            # 如果需要 LLM Judge
+            if case.get("llm_judge"):
+                return TestHelper.run_llm_judge(agent, judge, case)
 
             # 否则用关键词验证
             TestHelper.validate_keywords(final_answer, case)
             return {"passed": True, "score": 10, "answer": final_answer}
+
         except AssertionError as e:
             return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
         except Exception as e:
             return {"passed": False, "score": 0, "reason": str(e), "answer": ""}
 
+
     @staticmethod
     def dispatch(agent, judge, case):
-        """根据用例类型自动分发执行"""
+        # 1. 轨迹验证
+        if "expected_action_sequence" in case:
+            return TestHelper.run_trajectory(agent, case)
+
+        # 2. 多轮对话
         if "turns" in case:
             return TestHelper.run_multiturn(agent, judge, case)
-        elif case.get("expected_action_sequence"):
-            return TestHelper.run_trajectory(agent, case)
-        elif case.get("capability"):
-            return TestHelper.run_capability(agent, judge, case)
-        else:
-            return TestHelper.run_simple(agent, case)
+
+        # 3. LLM Judge（只有明确写了 llm_judge: true 才走）
+        if case.get("llm_judge"):
+            return TestHelper.run_llm_judge(agent, judge, case)
+
+        # 4. 其他所有（包括 capability: true 的用例）→ 走简单验证
+        return TestHelper.run_simple(agent, case)

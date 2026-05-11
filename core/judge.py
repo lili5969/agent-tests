@@ -1,4 +1,6 @@
 import commons.logger as logger
+import json
+from json import JSONDecodeError
 
 
 class Judge:
@@ -18,7 +20,9 @@ class Judge:
 
     def _build_system_prompt(self, question, actual_answer, criteria):
         tools_desc = self._build_tools_description()
-        return f"""你是一个严格的质量评估专家。请根据以下标准对 Agent 的回答进行打分（0-10 分）：
+        return f"""你是一个严格的质量评估专家。请根据以下标准对 Agent 的回答进行打分（0-10 分）。
+
+    【重要】直接输出纯 JSON，不要使用 ```json 代码块，不要输出任何其他文字。
 
     问题：{question}
     Agent 回答：{actual_answer}
@@ -29,12 +33,8 @@ class Judge:
     可用工具：
     {tools_desc}
 
-    请输出 JSON 格式：
-    {{
-        "score": 整数分数,
-        "reason": "简短理由"
-    }}
-    """
+    输出格式（纯 JSON，不要 markdown）：
+    {{"score": 整数分数, "reason": "简短理由"}}"""
 
     def _build_tools_description(self):
         if not self.tools_schema:
@@ -48,7 +48,17 @@ class Judge:
         return "\n".join(lines)
 
     def _parse_response(self, response):
-        content = response.get('content', '{}')
+        content = response.get('content', '{}').strip()
+
+        # 清理 markdown 代码块
+        if content.startswith('```json'):
+            content = content[7:]
+        elif content.startswith('```'):
+            content = content[3:]
+        if content.endswith('```'):
+            content = content[:-3]
+        content = content.strip()
+
         try:
             import json
             result = json.loads(content)
@@ -58,7 +68,7 @@ class Judge:
                 "raw": content
             }
         except json.JSONDecodeError:
-            logger.warning(f"Judge 返回非 JSON: {content}")
+            logger.error(f"Judge 返回非 JSON: {content[:200]}")
             return {
                 "score": 0,
                 "reason": "解析失败",
