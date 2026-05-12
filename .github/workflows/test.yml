@@ -68,13 +68,13 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
 
-  # ========== 4. 预发布阶段：Golden Double Confirm + Full 全量（依赖 golden-test-env 成功）==========
-  pre-release:
-    name: 预发布验证（Golden 100% 后自动触发）
+  # ========== 4a. 预发布阶段：Golden Double Confirm ==========
+  golden-double:
+    name: Golden Double Confirm（预发布门禁）
     runs-on: ubuntu-latest
     needs: golden-test-env
     if: github.event_name == 'push' && needs.golden-test-env.result == 'success'
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -88,6 +88,22 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+
+  # ========== 4b. 预发布阶段：Full 全量回归 ==========
+  full-pre-release:
+    name: Full 全量回归（预发布验证）
+    runs-on: ubuntu-latest
+    needs: golden-double  # 依赖 Golden Double 成功
+    if: github.event_name == 'push' && needs.golden-double.result == 'success'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pytest pytest-timeout openai langsmith pyyaml python-dotenv requests
       - name: Full 全量回归
         run: pytest testcases/test_react_integration.py -v --tb=short
         env:
