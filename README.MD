@@ -21,8 +21,11 @@ markdown
 - **分层测试**：冒烟测试、集成测试、黄金集门禁、能力专项
 - **多维度断言**：关键词、轨迹验证、参数依赖、LLM-as-Judge
 - **模型对比**：Qwen2 vs DeepSeek 能力对比，输出选型报告
-- **黄金集管理**：15个核心用例（覆盖5大能力），发版红线
+- **黄金集管理**：23个核心用例（覆盖5大能力），发版红线
 - **指标统计**：定量（通过率/平均分）+ 定性（失败模式分类）
+
+## 详细文档
+**[完整作品集](portfolio.md)** - 架构设计、测试策略、模型对比、Bad Case 分析
 
 ## 快速开始
 
@@ -92,10 +95,10 @@ pytest testcases/test_model_comparison.py -v              # Qwen2 vs DeepSeek
 
 ## 测试结果
 
-- **黄金集**：15/15 通过 ✅  
+- **黄金集**：23/23通过 ✅  
   覆盖能力：tool_calling、task_planning、state_memory、safety、error_fallback
 
-- **全量集成**：53/64 通过（82.8%）
+- **全量集成**：43/47 通过（91%）
 
 - **模型对比**：DeepSeek 优于 Qwen2（安全能力 + 工具规范性） > 注：模型对比测试仅本地运行，CI 自动跳过。
 
@@ -114,4 +117,6 @@ pytest testcases/test_model_comparison.py -v              # Qwen2 vs DeepSeek
 | 集成测试 | ≥80% |
 | 模型对比 | 已完成 |
 | 指标报告 | 自动生成 |
+
+
 
