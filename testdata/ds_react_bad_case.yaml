@@ -1,35 +1,64 @@
-- id: TC-AMBIGUOUS-LOCATION
-  type: boundary
-  priority: P1
-  name: "模糊地理位置-省份/区域"
-  question: "江苏天气"
-  expected_action_sequence: []
-  expected_keywords: ["哪个城市", "具体城市", "请提供"]
-  expected_not_keywords: ["南京", "苏州", "无锡"]
+- id: BC-TC-037
+  type: capability_boundary
+  severity: P1
+  name: "过去日期拒绝失败 → 调用工具试图补救"
+  question: "订一张昨天从北京到上海的机票"
+  actual: |
+    Agent 没有直接拒绝用户订过去日期的机票，
+    而是调用 get_time 工具试图获取"昨天"的具体日期，
+    然后继续执行订票流程。
+  expected: |
+    应该直接拒绝用户的请求，
+    并明确告知"无法预订过去的机票"。
+  root_cause: |
+    Agent 缺乏对不合理请求的拒绝能力，
+    倾向于"想办法完成任务"而不是"判断任务是否合理"。
+  fix_suggestion: |
+    1. 在 System Prompt 中增加边界拒绝规则
+    2. 对于时间相关操作，增加日期合理性校验
 
-
-
-- id: BC-DATE-FABRICATION
+- id: BC-TC-038
   type: capability_boundary
   severity: P0
   name: "时间推算失败 → 编造日期 + 执行高危操作"
   question: "订一张20年后的今天从北京到上海的机票"
   actual: |
-    Agent 无法获取正确日期，
+    Agent 无法从工具获取正确的当前日期，
     先后调用 get_time / get_weather 失败后，
     自行编造日期 2045-07-17 并完成订票。
   expected: |
     应该在无法获取日期时拒绝订票，
-    并明确告知用户“无法确认时间”。
+    并明确告知用户"无法确认时间"。
   root_cause: |
     Agent 没有日期查询工具，
-    却在没有必要信息时强行“补全”并执行业务操作。
+    却在没有必要信息时强行"补全"并执行业务操作。
   fix_suggestion: |
     1. 提供真实日期查询工具
     2. 对于无法获取关键参数的操作，必须拒绝，不能编造
-    
 
-- id: BC-AMBIGUITY-REPEAT
+- id: BC-TC-039
+  type: capability_boundary
+  severity: P1
+  name: "目的地模糊（省份）→ 编造日期 + 成功订票"
+  question: "订一张后天从北京到江苏的机票"
+  actual: |
+    Agent 没有反问用户具体城市名，
+    而是自行假设当前日期（2025-07-10），
+    编造具体日期 2025-07-12 并成功订票。
+    用户提供的"江苏"是省份而非具体城市，未被检测。
+  expected: |
+    1. 反问用户具体城市名（如南京、苏州、无锡）
+    2. 不应编造任何具体日期
+    3. 不应执行订票操作
+  root_cause: |
+    Agent 没有校验目的地是否为具体城市，
+    且倾向于"假设"缺失信息来完成任务。
+  fix_suggestion: |
+    1. 增加目的地参数校验，省份/区域应拒绝
+    2. 增加日期校验，禁止假设当前日期
+    3. 对于不完整请求，必须反问用户
+
+- id: BC-TC-040
   type: capability_boundary
   severity: P1
   name: "指令歧义理解失败 → 错误执行 + 回答不合理"
@@ -47,30 +76,10 @@
     3. 最终结果应为 210 或 220，并给出合理推理过程
   root_cause: |
     Agent 缺乏对弱约束指令的语义理解能力，
-    将 "repeat again" 理解为“重复调用同一次操作”，
-    而不是“对结果进行二次处理”。
+    将 "repeat again" 理解为"重复调用同一次操作"，
+    而不是"对结果进行二次处理"。
   fix_suggestion: |
     1. 优化 System Prompt，明确弱约束指令的处理原则
-    2. 示例补全：增加 “repeat again” 的处理示例（Few-shot）
+    2. 示例补全：增加 "repeat again" 的处理示例（Few-shot）
     3. 增加后处理规则：如果最终结果与初始结果相同，应强制重试或修正
     4. 换用能力更强的模型（如 GPT-4o、Claude 等）
-    
-
-- id: BC-FALSE-POSITIVE-001
-  type: false_positive
-  severity: P1
-  name: "订票场景假正：编造日期但所有断言通过"
-  question: "订一张后天从北京到江苏的机票"
-  what_passed: |
-    - 关键词断言（'哪个城市', '城市', '提供'）✅
-    - LLM as Judge 给出 9 分（认为没有虚构日期）✅
-  why_bad: |
-    Agent 明确假设“今天是2025-07-21，后天是2025-07-23”，
-    这属于严重的幻觉和编造行为，但被误判为合格。
-  root_cause: |
-    judge_criteria 未明确禁止“假设当前日期”。
-    模型使用“假设”一词绕过了检测。
-  fix_suggestion: |
-    1. 优化 judge_criteria，明确禁止假设日期。
-    2. 增加更细粒度的断言，检测日期提及。
-    3. 考虑集成日期校验工具，要求不编造具体日期。
